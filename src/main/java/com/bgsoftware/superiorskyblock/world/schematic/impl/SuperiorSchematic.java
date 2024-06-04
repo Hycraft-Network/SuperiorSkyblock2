@@ -64,8 +64,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
         BlockOffset schematicOffset = SBlockOffset.fromOffsets(offsetX, offsetY, offsetZ).negate();
         float yaw = compoundTag.getFloat("yaw");
         float pitch = compoundTag.getFloat("pitch");
-        this.spawn = new Vector(spawnX, spawnY, spawnZ);
-        this.size = new Vector(xSize, ySize, zSize);
+        Vector spawn = new Vector(spawnX, spawnY, spawnZ);
 
         List<SchematicBlockData> blocks;
         ListTag blocksList = compoundTag.getList("blocks");
@@ -109,7 +108,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
             }
         }
 
-        this.data = new Data(schematicOffset, yaw, pitch, blocks, entities);
+        this.data = new Data(schematicOffset, spawn, yaw, pitch, blocks, entities);
     }
 
     private SuperiorSchematic(String name, Data data, KeyMap<Integer> cachedCounts) {
@@ -230,9 +229,9 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
     @Override
     public Location adjustSpawn(Location center) {
-        Location spawnLocation = center.clone().add(this.spawn.clone());
-        spawnLocation.setPitch(this.pitch);
-        spawnLocation.setYaw(this.yaw);
+        Location spawnLocation = center.clone().add(this.data.spawn.clone());
+        spawnLocation.setPitch(this.data.pitch);
+        spawnLocation.setYaw(this.data.yaw);
         return spawnLocation;
     }
 
@@ -253,13 +252,15 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
     private static class Data {
 
         private final BlockOffset offset;
+        private final Vector spawn;
         private final float yaw;
         private final float pitch;
         private final List<SchematicBlockData> blocks;
         private final List<SchematicEntity> entities;
 
-        Data(BlockOffset offset, float yaw, float pitch, List<SchematicBlockData> blocks, List<SchematicEntity> entities) {
+        Data(BlockOffset offset, Vector spawn, float yaw, float pitch, List<SchematicBlockData> blocks, List<SchematicEntity> entities) {
             this.offset = offset;
+            this.spawn = spawn;
             this.yaw = yaw;
             this.pitch = pitch;
             this.blocks = Collections.unmodifiableList(blocks);
