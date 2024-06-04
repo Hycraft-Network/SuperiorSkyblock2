@@ -477,6 +477,7 @@ default-settings:
   - 'SPAWNER_MONSTER_SPAWN'
   - 'WATER_FLOW'
   - 'LAVA_FLOW'
+  - 'ALLOW_FLYING'
   - 'CROPS_GROWTH'
   - 'TREE_GROWTH'
   - 'FIRE_SPREAD'
