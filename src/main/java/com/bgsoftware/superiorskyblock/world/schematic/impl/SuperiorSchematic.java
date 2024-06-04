@@ -2,18 +2,19 @@ package com.bgsoftware.superiorskyblock.world.schematic.impl;
 
 import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.key.Key;
+import com.bgsoftware.superiorskyblock.api.key.KeyMap;
 import com.bgsoftware.superiorskyblock.api.schematic.Schematic;
 import com.bgsoftware.superiorskyblock.api.wrappers.BlockOffset;
 import com.bgsoftware.superiorskyblock.core.ChunkPosition;
 import com.bgsoftware.superiorskyblock.core.SBlockOffset;
-import com.bgsoftware.superiorskyblock.core.schematic.SchematicBlock;
-import com.bgsoftware.superiorskyblock.core.schematic.SchematicBlockData;
-import com.bgsoftware.superiorskyblock.core.schematic.SchematicEntity;
 import com.bgsoftware.superiorskyblock.core.SequentialListBuilder;
 import com.bgsoftware.superiorskyblock.core.logging.Debug;
 import com.bgsoftware.superiorskyblock.core.logging.Log;
 import com.bgsoftware.superiorskyblock.core.profiler.ProfileType;
 import com.bgsoftware.superiorskyblock.core.profiler.Profiler;
+import com.bgsoftware.superiorskyblock.core.schematic.SchematicBlock;
+import com.bgsoftware.superiorskyblock.core.schematic.SchematicBlockData;
+import com.bgsoftware.superiorskyblock.core.schematic.SchematicEntity;
 import com.bgsoftware.superiorskyblock.core.serialization.Serializers;
 import com.bgsoftware.superiorskyblock.core.threads.BukkitExecutor;
 import com.bgsoftware.superiorskyblock.module.BuiltinModules;
@@ -41,13 +42,7 @@ import java.util.function.Consumer;
 
 public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
-    private final BlockOffset offset;
-    private final Vector spawn;
-    private final Vector size;
-    private final float yaw;
-    private final float pitch;
-    private final List<SchematicBlockData> blocks;
-    private final List<SchematicEntity> entities;
+    private final Data data;
 
     private List<ChunkPosition> affectedChunks = null;
 
@@ -66,15 +61,16 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
         int spawnY = compoundTag.getInt("spawnY", offsetY);
         int spawnZ = compoundTag.getInt("spawnZ", offsetZ);
 
-        this.offset = SBlockOffset.fromOffsets(offsetX, offsetY, offsetZ).negate();
-        this.yaw = compoundTag.getFloat("yaw");
-        this.pitch = compoundTag.getFloat("pitch");
+        BlockOffset schematicOffset = SBlockOffset.fromOffsets(offsetX, offsetY, offsetZ).negate();
+        float yaw = compoundTag.getFloat("yaw");
+        float pitch = compoundTag.getFloat("pitch");
         this.spawn = new Vector(spawnX, spawnY, spawnZ);
         this.size = new Vector(xSize, ySize, zSize);
 
+        List<SchematicBlockData> blocks;
         ListTag blocksList = compoundTag.getList("blocks");
         if (blocksList == null) {
-            this.blocks = Collections.emptyList();
+            blocks = Collections.emptyList();
         } else {
             LinkedList<SchematicBlockData> schematicBlocks = new LinkedList<>();
 
@@ -86,16 +82,17 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
                 }
             }
 
-            this.blocks = new SequentialListBuilder<SchematicBlockData>()
+            blocks = new SequentialListBuilder<SchematicBlockData>()
                     .sorted(SchematicBlockData::compareTo)
                     .build(schematicBlocks);
         }
 
+        List<SchematicEntity> entities;
         ListTag entitiesList = compoundTag.getList("entities");
         if (entitiesList == null) {
-            this.entities = Collections.emptyList();
+            entities = Collections.emptyList();
         } else {
-            List<SchematicEntity> entities = new LinkedList<>();
+            entities = new LinkedList<>();
 
             for (Tag<?> tag : entitiesList) {
                 CompoundTag compound = (CompoundTag) tag;
@@ -110,9 +107,14 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
                     error.printStackTrace();
                 }
             }
-
-            this.entities = Collections.unmodifiableList(entities);
         }
+
+        this.data = new Data(schematicOffset, yaw, pitch, blocks, entities);
+    }
+
+    private SuperiorSchematic(String name, Data data, KeyMap<Integer> cachedCounts) {
+        super(name, cachedCounts);
+        this.data = data;
     }
 
     @Override
@@ -132,11 +134,11 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
         Log.debug(Debug.PASTE_SCHEMATIC, this.name, island.getOwner().getName(), location);
 
         WorldEditSession worldEditSession = plugin.getNMSWorld().createEditSession(location.getWorld());
-        Location min = this.offset.applyToLocation(location);
+        Location min = this.data.offset.applyToLocation(location);
 
         List<Runnable> finishTasks = new LinkedList<>();
 
-        this.blocks.forEach(schematicBlockData -> {
+        this.data.blocks.forEach(schematicBlockData -> {
             Location blockLocation = schematicBlockData.getBlockOffset().applyToLocation(min.clone());
             SchematicBlock schematicBlock = new SchematicBlock(blockLocation, schematicBlockData);
 
@@ -195,7 +197,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
                     Log.debugResult(Debug.PASTE_SCHEMATIC, "Spawning Entities", "");
 
-                    for (SchematicEntity entity : this.entities) {
+                    for (SchematicEntity entity : this.data.entities) {
                         entity.spawnEntity(min);
                     }
 
@@ -221,8 +223,8 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
     @Override
     public Location adjustRotation(Location location) {
-        location.setYaw(yaw);
-        location.setPitch(pitch);
+        location.setYaw(this.data.yaw);
+        location.setPitch(this.data.pitch);
         return location;
     }
 
@@ -239,9 +241,31 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
         return affectedChunks == null ? Collections.emptyList() : Collections.unmodifiableList(affectedChunks);
     }
 
+    public SuperiorSchematic copy(String newName) {
+        return new SuperiorSchematic(newName, this.data, this.cachedCounts);
+    }
+
     private void readBlock(SchematicBlockData block) {
         Key key = plugin.getNMSAlgorithms().getBlockKey(block.getCombinedId());
         cachedCounts.put(key, cachedCounts.getRaw(key, 0) + 1);
+    }
+
+    private static class Data {
+
+        private final BlockOffset offset;
+        private final float yaw;
+        private final float pitch;
+        private final List<SchematicBlockData> blocks;
+        private final List<SchematicEntity> entities;
+
+        Data(BlockOffset offset, float yaw, float pitch, List<SchematicBlockData> blocks, List<SchematicEntity> entities) {
+            this.offset = offset;
+            this.yaw = yaw;
+            this.pitch = pitch;
+            this.blocks = Collections.unmodifiableList(blocks);
+            this.entities = Collections.unmodifiableList(entities);
+        }
+
     }
 
 }

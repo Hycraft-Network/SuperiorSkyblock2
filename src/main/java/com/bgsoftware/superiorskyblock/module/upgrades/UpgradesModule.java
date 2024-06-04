@@ -9,12 +9,16 @@ import com.bgsoftware.superiorskyblock.api.key.KeyMap;
 import com.bgsoftware.superiorskyblock.api.upgrades.cost.UpgradeCost;
 import com.bgsoftware.superiorskyblock.api.upgrades.cost.UpgradeCostLoadException;
 import com.bgsoftware.superiorskyblock.api.upgrades.cost.UpgradeCostLoader;
+import com.bgsoftware.superiorskyblock.core.collections.ArrayMap;
+import com.bgsoftware.superiorskyblock.core.collections.CollectionsFactory;
 import com.bgsoftware.superiorskyblock.core.formatting.Formatters;
 import com.bgsoftware.superiorskyblock.core.key.KeyIndicator;
 import com.bgsoftware.superiorskyblock.core.key.KeyMaps;
 import com.bgsoftware.superiorskyblock.core.key.Keys;
 import com.bgsoftware.superiorskyblock.core.logging.Log;
-import com.bgsoftware.superiorskyblock.island.container.value.Value;
+import com.bgsoftware.superiorskyblock.core.value.DoubleValue;
+import com.bgsoftware.superiorskyblock.core.value.IntValue;
+import com.bgsoftware.superiorskyblock.core.value.Value;
 import com.bgsoftware.superiorskyblock.island.upgrade.SUpgrade;
 import com.bgsoftware.superiorskyblock.island.upgrade.SUpgradeLevel;
 import com.bgsoftware.superiorskyblock.island.upgrade.UpgradeRequirement;
@@ -40,7 +44,6 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -204,13 +207,13 @@ public class UpgradesModule extends BuiltinModule {
             requirements.add(new UpgradeRequirement(sections[0], Formatters.COLOR_FORMATTER.format(sections[1])));
         }
 
-        Value<Double> cropGrowth = Value.syncedFixed(levelSection.getDouble("crop-growth", -1D));
-        Value<Double> spawnerRates = Value.syncedFixed(levelSection.getDouble("spawner-rates", -1D));
-        Value<Double> mobDrops = Value.syncedFixed(levelSection.getDouble("mob-drops", -1D));
-        Value<Integer> teamLimit = Value.syncedFixed(levelSection.getInt("team-limit", -1));
-        Value<Integer> warpsLimit = Value.syncedFixed(levelSection.getInt("warps-limit", -1));
-        Value<Integer> coopLimit = Value.syncedFixed(levelSection.getInt("coop-limit", -1));
-        Value<Integer> borderSize = Value.syncedFixed(levelSection.getInt("border-size", -1));
+        DoubleValue cropGrowth = DoubleValue.syncedFixed(levelSection.getDouble("crop-growth", -1D));
+        DoubleValue spawnerRates = DoubleValue.syncedFixed(levelSection.getDouble("spawner-rates", -1D));
+        DoubleValue mobDrops = DoubleValue.syncedFixed(levelSection.getDouble("mob-drops", -1D));
+        IntValue teamLimit = IntValue.syncedFixed(levelSection.getInt("team-limit", -1));
+        IntValue warpsLimit = IntValue.syncedFixed(levelSection.getInt("warps-limit", -1));
+        IntValue coopLimit = IntValue.syncedFixed(levelSection.getInt("coop-limit", -1));
+        IntValue borderSize = IntValue.syncedFixed(levelSection.getInt("border-size", -1));
 
         if (borderSize.get() > plugin.getSettings().getMaxIslandSize()) {
             Log.warn("Upgrade by name ", upgrade.getName(), " (level ", level, ") has illegal border-size, skipping...");
@@ -218,7 +221,7 @@ public class UpgradesModule extends BuiltinModule {
         }
 
         Value<BigDecimal> bankLimit = Value.syncedFixed(new BigDecimal(levelSection.getString("bank-limit", "-1")));
-        KeyMap<Integer> blockLimits = KeyMaps.createHashMap(KeyIndicator.MATERIAL);
+        KeyMap<Integer> blockLimits = KeyMaps.createArrayMap(KeyIndicator.MATERIAL);
         if (levelSection.contains("block-limits")) {
             for (String block : levelSection.getConfigurationSection("block-limits").getKeys(false)) {
                 Key blockKey = Keys.ofMaterialAndData(block);
@@ -226,7 +229,7 @@ public class UpgradesModule extends BuiltinModule {
                 plugin.getBlockValues().addCustomBlockKey(blockKey);
             }
         }
-        KeyMap<Integer> entityLimits = KeyMaps.createIdentityHashMap(KeyIndicator.ENTITY_TYPE);
+        KeyMap<Integer> entityLimits = KeyMaps.createArrayMap(KeyIndicator.ENTITY_TYPE);
         if (levelSection.contains("entity-limits")) {
             for (String entity : levelSection.getConfigurationSection("entity-limits").getKeys(false))
                 entityLimits.put(Keys.ofEntityType(entity), levelSection.getInt("entity-limits." + entity));
@@ -237,16 +240,16 @@ public class UpgradesModule extends BuiltinModule {
                 try {
                     World.Environment environment = World.Environment.valueOf(blockOrEnv.toUpperCase(Locale.ENGLISH));
                     for (String block : levelSection.getConfigurationSection("generator-rates." + blockOrEnv).getKeys(false)) {
-                        generatorRates.computeIfAbsent(environment, e -> KeyMaps.createHashMap(KeyIndicator.MATERIAL)).put(
+                        generatorRates.computeIfAbsent(environment, e -> KeyMaps.createArrayMap(KeyIndicator.MATERIAL)).put(
                                 Keys.ofMaterialAndData(block), levelSection.getInt("generator-rates." + blockOrEnv + "." + block));
                     }
                 } catch (Exception ex) {
-                    generatorRates.computeIfAbsent(plugin.getSettings().getWorlds().getDefaultWorld(), e -> KeyMaps.createHashMap(KeyIndicator.MATERIAL))
+                    generatorRates.computeIfAbsent(plugin.getSettings().getWorlds().getDefaultWorld(), e -> KeyMaps.createArrayMap(KeyIndicator.MATERIAL))
                             .put(Keys.ofMaterialAndData(blockOrEnv), levelSection.getInt("generator-rates." + blockOrEnv));
                 }
             }
         }
-        Map<PotionEffectType, Integer> islandEffects = new HashMap<>();
+        Map<PotionEffectType, Integer> islandEffects = new ArrayMap<>();
         if (levelSection.contains("island-effects")) {
             for (String effect : levelSection.getConfigurationSection("island-effects").getKeys(false)) {
                 PotionEffectType potionEffectType = PotionEffectType.getByName(effect);
@@ -254,7 +257,7 @@ public class UpgradesModule extends BuiltinModule {
                     islandEffects.put(potionEffectType, levelSection.getInt("island-effects." + effect) - 1);
             }
         }
-        Map<Integer, Integer> rolesLimits = new HashMap<>();
+        Map<Integer, Integer> rolesLimits = CollectionsFactory.createInt2IntArrayMap();
         if (levelSection.contains("role-limits")) {
             for (String roleId : levelSection.getConfigurationSection("role-limits").getKeys(false)) {
                 try {
