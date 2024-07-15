@@ -5,10 +5,12 @@ import com.bgsoftware.common.reflection.ReflectField;
 import com.bgsoftware.superiorskyblock.SuperiorSkyblockPlugin;
 import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.objects.Pair;
+import com.bgsoftware.superiorskyblock.api.world.Dimension;
 import com.bgsoftware.superiorskyblock.core.ChunkPosition;
-import com.bgsoftware.superiorskyblock.core.SequentialListBuilder;
 import com.bgsoftware.superiorskyblock.core.Text;
 import com.bgsoftware.superiorskyblock.core.collections.CollectionsFactory;
+import com.bgsoftware.superiorskyblock.core.collections.view.Long2ObjectMapView;
+import com.bgsoftware.superiorskyblock.core.collections.view.LongIterator;
 import com.bgsoftware.superiorskyblock.island.IslandUtils;
 import com.bgsoftware.superiorskyblock.nms.world.WorldEditSession;
 import com.bgsoftware.superiorskyblock.tag.ByteTag;
@@ -74,14 +76,16 @@ public class WorldEditSessionImpl implements WorldEditSession {
         }
     }).get();
 
-    private final Map<Long, ChunkData> chunks = CollectionsFactory.createLong2ObjectArrayMap();
+    private final Long2ObjectMapView<ChunkData> chunks = CollectionsFactory.createLong2ObjectArrayMap();
     private final List<Pair<BlockPos, BlockState>> blocksToUpdate = new LinkedList<>();
     private final List<Pair<BlockPos, CompoundTag>> blockEntities = new LinkedList<>();
     private final Set<ChunkPos> lightenChunks = isStarLightInterface ? new HashSet<>() : Collections.emptySet();
     private final ServerLevel serverLevel;
+    private final Dimension dimension;
 
     public WorldEditSessionImpl(ServerLevel serverLevel) {
         this.serverLevel = serverLevel;
+        this.dimension = plugin.getProviders().getWorldsProvider().getIslandsWorldDimension(serverLevel.getWorld());
     }
 
     @Override
@@ -150,11 +154,15 @@ public class WorldEditSessionImpl implements WorldEditSession {
 
     @Override
     public List<ChunkPosition> getAffectedChunks() {
+        List<ChunkPosition> chunkPositions = new LinkedList<>();
         World bukkitWorld = serverLevel.getWorld();
-        return new SequentialListBuilder<Long>().map(chunks.keySet(), chunkKey -> {
+        LongIterator iterator = chunks.keyIterator();
+        while (iterator.hasNext()) {
+            long chunkKey = iterator.next();
             ChunkPos chunkPos = new ChunkPos(chunkKey);
-            return ChunkPosition.of(bukkitWorld, chunkPos.x, chunkPos.z);
-        });
+            chunkPositions.add(ChunkPosition.of(bukkitWorld, chunkPos.x, chunkPos.z));
+        }
+        return chunkPositions;
     }
 
     @Override
@@ -180,8 +188,7 @@ public class WorldEditSessionImpl implements WorldEditSession {
         Biome[] biomes = BIOME_BASE_ARRAY.get(levelChunk.getBiomes());
         if (biomes != null) {
             Registry<Biome> biomesRegistry = serverLevel.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY);
-            Biome biome = CraftBlock.biomeToBiomeBase(biomesRegistry,
-                    IslandUtils.getDefaultWorldBiome(serverLevel.getWorld().getEnvironment()));
+            Biome biome = CraftBlock.biomeToBiomeBase(biomesRegistry, IslandUtils.getDefaultWorldBiome(this.dimension));
             Arrays.fill(biomes, biome);
         }
 

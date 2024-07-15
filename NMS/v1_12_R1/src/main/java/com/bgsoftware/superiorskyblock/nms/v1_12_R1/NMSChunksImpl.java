@@ -17,6 +17,7 @@ import com.bgsoftware.superiorskyblock.nms.NMSChunks;
 import com.bgsoftware.superiorskyblock.nms.v1_12_R1.chunks.CropsTickingTileEntity;
 import com.bgsoftware.superiorskyblock.nms.v1_12_R1.chunks.EmptyCounterChunkSection;
 import com.bgsoftware.superiorskyblock.nms.v1_12_R1.world.KeyBlocksCache;
+import com.bgsoftware.superiorskyblock.world.BukkitEntities;
 import com.bgsoftware.superiorskyblock.world.generator.IslandsGenerator;
 import net.minecraft.server.v1_12_R1.BiomeBase;
 import net.minecraft.server.v1_12_R1.Block;
@@ -271,7 +272,8 @@ public class NMSChunksImpl implements NMSChunks {
             @Override
             public void onChunk(Chunk chunk, boolean isLoaded) {
                 for (org.bukkit.entity.Entity bukkitEntity : chunk.bukkitChunk.getEntities()) {
-                    chunkEntities.computeIfAbsent(Keys.of(bukkitEntity), i -> new Counter(0)).inc(1);
+                    if (!BukkitEntities.canBypassEntityLimit(bukkitEntity))
+                        chunkEntities.computeIfAbsent(Keys.of(bukkitEntity), i -> new Counter(0)).inc(1);
                 }
             }
 
@@ -347,8 +349,8 @@ public class NMSChunksImpl implements NMSChunks {
             return;
 
         if (stop) {
-            ChunkCoordIntPair chunkCoords = new ChunkCoordIntPair(chunk.getX(), chunk.getZ());
-            CropsTickingTileEntity cropsTickingTileEntity = CropsTickingTileEntity.remove(chunkCoords);
+            CropsTickingTileEntity cropsTickingTileEntity = CropsTickingTileEntity.remove(
+                    ChunkCoordIntPair.a(chunk.getX(), chunk.getZ()));
             if (cropsTickingTileEntity != null)
                 cropsTickingTileEntity.getWorld().tileEntityListTick.remove(cropsTickingTileEntity);
         } else {

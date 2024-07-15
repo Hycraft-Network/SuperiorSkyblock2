@@ -132,6 +132,17 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
         Log.debug(Debug.PASTE_SCHEMATIC, this.name, island.getOwner().getName(), location);
 
+        try {
+            pasteSchematicAsyncInternal(island, location, profiler, callback, onFailure);
+        } catch (Throwable error) {
+            Log.debugResult(Debug.PASTE_SCHEMATIC, "Failed Schematic Placement", error);
+            Profiler.end(profiler);
+            if (onFailure != null)
+                onFailure.accept(error);
+        }
+    }
+
+    private void pasteSchematicAsyncInternal(Island island, Location location, long profiler, Runnable callback, Consumer<Throwable> onFailure) {
         WorldEditSession worldEditSession = plugin.getNMSWorld().createEditSession(location.getWorld());
         Location min = this.data.offset.applyToLocation(location);
 
@@ -174,6 +185,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
                 } catch (Throwable error) {
                     Log.debugResult(Debug.PASTE_SCHEMATIC, "Failed Loading Chunk", error);
                     failed.set(true);
+                    Profiler.end(profiler);
                     if (onFailure != null)
                         onFailure.accept(error);
                 }
@@ -213,6 +225,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
                     this.affectedChunks = null;
                 } catch (Throwable error2) {
                     Log.debugResult(Debug.PASTE_SCHEMATIC, "Failed Finishing Placement", error2);
+                    Profiler.end(profiler);
                     if (onFailure != null)
                         onFailure.accept(error2);
                 }
