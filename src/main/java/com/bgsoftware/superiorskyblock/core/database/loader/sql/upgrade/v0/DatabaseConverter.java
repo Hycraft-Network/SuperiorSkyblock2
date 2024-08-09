@@ -9,25 +9,14 @@ import com.bgsoftware.superiorskyblock.api.island.PlayerRole;
 import com.bgsoftware.superiorskyblock.api.key.KeyMap;
 import com.bgsoftware.superiorskyblock.api.objects.Pair;
 import com.bgsoftware.superiorskyblock.core.Text;
-import com.bgsoftware.superiorskyblock.core.database.transaction.DatabaseTransactionsExecutor;
 import com.bgsoftware.superiorskyblock.core.database.loader.sql.SQLDatabase;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.BankTransactionsAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.GridAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.IslandAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.IslandChestAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.IslandWarpAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.PlayerAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.StackedBlockAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.WarpCategoryAttributes;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.deserializer.EmptyParameterGuardDeserializer;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.deserializer.IDeserializer;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.deserializer.JsonDeserializer;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.deserializer.MultipleDeserializer;
-import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.deserializer.RawDeserializer;
+import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.attributes.*;
+import com.bgsoftware.superiorskyblock.core.database.loader.sql.upgrade.v0.deserializer.*;
 import com.bgsoftware.superiorskyblock.core.database.sql.ResultSetMapBridge;
 import com.bgsoftware.superiorskyblock.core.database.sql.SQLHelper;
 import com.bgsoftware.superiorskyblock.core.database.sql.session.QueryResult;
 import com.bgsoftware.superiorskyblock.core.database.sql.transaction.CustomSQLDatabaseTransaction;
+import com.bgsoftware.superiorskyblock.core.database.transaction.DatabaseTransactionsExecutor;
 import com.bgsoftware.superiorskyblock.core.logging.Log;
 import com.bgsoftware.superiorskyblock.core.mutable.MutableObject;
 import com.bgsoftware.superiorskyblock.island.privilege.PlayerPrivilegeNode;
@@ -37,11 +26,7 @@ import org.bukkit.potion.PotionEffectType;
 
 import java.io.File;
 import java.sql.ResultSet;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
@@ -50,10 +35,6 @@ public class DatabaseConverter {
 
     private static final SuperiorSkyblockPlugin plugin = SuperiorSkyblockPlugin.getPlugin();
     private static final UUID CONSOLE_UUID = new UUID(0, 0);
-
-    private static File databaseFile;
-    private static boolean isRemoteDatabase;
-
     private static final List<PlayerAttributes> loadedPlayers = new ArrayList<>();
     private static final List<IslandAttributes> loadedIslands = new ArrayList<>();
     private static final List<StackedBlockAttributes> loadedBlocks = new ArrayList<>();
@@ -63,6 +44,8 @@ public class DatabaseConverter {
             JsonDeserializer.INSTANCE,
             RawDeserializer.INSTANCE
     );
+    private static File databaseFile;
+    private static boolean isRemoteDatabase;
     private static GridAttributes gridAttributes;
 
     private DatabaseConverter() {
@@ -377,6 +360,7 @@ public class DatabaseConverter {
                 .bindObject(playerAttributes.getValue(PlayerAttributes.Field.LAST_USED_SKIN))
                 .bindObject(playerAttributes.getValue(PlayerAttributes.Field.DISBANDS))
                 .bindObject(playerAttributes.getValue(PlayerAttributes.Field.LAST_TIME_UPDATED))
+                .bindObject(playerAttributes.getValue(PlayerAttributes.Field.LAST_ISLAND_CREATED))
                 .newBatch();
         ((Map<String, Integer>) playerAttributes.getValue(PlayerAttributes.Field.COMPLETED_MISSIONS)).forEach((missionName, finishCount) ->
                 playersMissionsTransaction.bindObject(playerUUID)
@@ -587,6 +571,7 @@ public class DatabaseConverter {
                 .setValue(PlayerAttributes.Field.ISLAND_ROLE, playerRole)
                 .setValue(PlayerAttributes.Field.DISBANDS, resultSet.get("disbands", plugin.getSettings().getDisbandCount()))
                 .setValue(PlayerAttributes.Field.LAST_TIME_UPDATED, resultSet.get("lastTimeStatus", currentTime / 1000))
+                .setValue(PlayerAttributes.Field.LAST_ISLAND_CREATED, resultSet.get("lastIslandCreated", -1L))
                 .setValue(PlayerAttributes.Field.COMPLETED_MISSIONS, deserializer.deserializeMissions(resultSet.get("missions", "")))
                 .setValue(PlayerAttributes.Field.TOGGLED_PANEL, resultSet.get("toggledPanel", plugin.getSettings().isDefaultToggledPanel()))
                 .setValue(PlayerAttributes.Field.ISLAND_FLY, resultSet.get("islandFly", plugin.getSettings().isDefaultIslandFly()))

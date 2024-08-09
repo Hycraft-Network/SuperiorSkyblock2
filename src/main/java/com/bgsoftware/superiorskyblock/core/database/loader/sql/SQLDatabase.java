@@ -243,7 +243,8 @@ public class SQLDatabase {
                 new Pair<>("last_used_name", "TEXT"),
                 new Pair<>("last_used_skin", "TEXT"),
                 new Pair<>("disbands", "INTEGER"),
-                new Pair<>("last_time_updated", "BIGINT")
+                new Pair<>("last_time_updated", "BIGINT"),
+                new Pair<>("last_island_created", "BIGINT")
         );
 
         SQLHelper.createTable("players_custom_data",
