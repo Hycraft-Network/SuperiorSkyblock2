@@ -76,6 +76,16 @@ public class SuperiorNPCPlayer implements SuperiorPlayer {
     }
 
     @Override
+    public void setLastIslandCreated(long lastIslandCreated) {
+        // Do nothing.
+    }
+
+    @Override
+    public long getLastIslandCreated() {
+        return 0;
+    }
+
+    @Override
     public void updateName() {
         // Do nothing.
     }
@@ -435,6 +445,16 @@ public class SuperiorNPCPlayer implements SuperiorPlayer {
     @Override
     public void setSchematicPos2(Block block) {
         // Do nothing.
+    }
+
+    @Override
+    public void setSchematicSpawnLocation(Location location) {
+        // Do nothing.
+    }
+
+    @Override
+    public Location getSchematicSpawnLocation() {
+        return null;
     }
 
     @Nullable

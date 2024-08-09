@@ -30,6 +30,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
+import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,9 +57,14 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
         int offsetY = compoundTag.getInt("offsetY", ySize / 2);
         int offsetZ = compoundTag.getInt("offsetZ", zSize / 2);
 
+        int spawnX = compoundTag.getInt("spawnX", offsetX);
+        int spawnY = compoundTag.getInt("spawnY", offsetY);
+        int spawnZ = compoundTag.getInt("spawnZ", offsetZ);
+
         BlockOffset schematicOffset = SBlockOffset.fromOffsets(offsetX, offsetY, offsetZ).negate();
         float yaw = compoundTag.getFloat("yaw");
         float pitch = compoundTag.getFloat("pitch");
+        Vector spawn = new Vector(spawnX, spawnY, spawnZ);
 
         int dataVersion = compoundTag.getInt("minecraftDataVersion", -1);
 
@@ -104,7 +110,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
             }
         }
 
-        this.data = new Data(schematicOffset, yaw, pitch, blocks, entities);
+        this.data = new Data(schematicOffset, spawn, yaw, pitch, blocks, entities);
     }
 
     private SuperiorSchematic(String name, Data data, KeyMap<Integer> cachedCounts) {
@@ -237,6 +243,14 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
     }
 
     @Override
+    public Location adjustSpawn(Location center) {
+        Location spawnLocation = center.clone().add(this.data.spawn.clone());
+        spawnLocation.setPitch(this.data.pitch);
+        spawnLocation.setYaw(this.data.yaw);
+        return spawnLocation;
+    }
+
+    @Override
     public List<ChunkPosition> getAffectedChunks() {
         return affectedChunks == null ? Collections.emptyList() : Collections.unmodifiableList(affectedChunks);
     }
@@ -253,13 +267,15 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
     private static class Data {
 
         private final BlockOffset offset;
+        private final Vector spawn;
         private final float yaw;
         private final float pitch;
         private final List<SchematicBlockData> blocks;
         private final List<SchematicEntity> entities;
 
-        Data(BlockOffset offset, float yaw, float pitch, List<SchematicBlockData> blocks, List<SchematicEntity> entities) {
+        Data(BlockOffset offset, Vector spawn, float yaw, float pitch, List<SchematicBlockData> blocks, List<SchematicEntity> entities) {
             this.offset = offset;
+            this.spawn = spawn;
             this.yaw = yaw;
             this.pitch = pitch;
             this.blocks = Collections.unmodifiableList(blocks);

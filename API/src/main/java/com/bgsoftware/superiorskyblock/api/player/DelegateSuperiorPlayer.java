@@ -70,6 +70,16 @@ public class DelegateSuperiorPlayer implements SuperiorPlayer {
     }
 
     @Override
+    public void setLastIslandCreated(long lastIslandCreated) {
+        this.handle.setLastIslandCreated(lastIslandCreated);
+    }
+
+    @Override
+    public long getLastIslandCreated() {
+        return this.handle.getLastIslandCreated();
+    }
+
+    @Override
     public void updateName() {
         this.handle.updateName();
     }
@@ -431,6 +441,16 @@ public class DelegateSuperiorPlayer implements SuperiorPlayer {
     @Override
     public void setSchematicPos2(@Nullable Block block) {
         this.handle.setSchematicPos2(block);
+    }
+
+    @Override
+    public void setSchematicSpawnLocation(Location location) {
+        this.handle.setSchematicSpawnLocation(location);
+    }
+
+    @Override
+    public Location getSchematicSpawnLocation() {
+        return this.handle.getSchematicSpawnLocation();
     }
 
     @Override

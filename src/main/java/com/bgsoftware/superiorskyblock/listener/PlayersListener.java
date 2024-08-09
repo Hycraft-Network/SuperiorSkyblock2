@@ -261,14 +261,23 @@ public class PlayersListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     private void onPlayerChangeWorld(PlayerChangedWorldEvent e) {
-        Island island = plugin.getGrid().getIslandAt(e.getPlayer().getLocation());
-        SuperiorPlayer superiorPlayer = plugin.getPlayers().getSuperiorPlayer(e.getPlayer());
+        checkPlayerFlyState(e.getPlayer());
+    }
 
-        if (island != null && superiorPlayer.hasIslandFlyEnabled() && !e.getPlayer().getAllowFlight() &&
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    private void onPlayerTeleportFly(PlayerTeleportEvent e) {
+        checkPlayerFlyState(e.getPlayer());
+    }
+
+    private void checkPlayerFlyState(Player player) {
+        Island island = plugin.getGrid().getIslandAt(player.getLocation());
+        SuperiorPlayer superiorPlayer = plugin.getPlayers().getSuperiorPlayer(player);
+
+        if (island != null && superiorPlayer.hasIslandFlyEnabled() && !player.getAllowFlight() &&
                 island.hasPermission(superiorPlayer, IslandPrivileges.FLY))
             BukkitExecutor.sync(() -> {
-                e.getPlayer().setAllowFlight(true);
-                e.getPlayer().setFlying(true);
+                player.setAllowFlight(true);
+                player.setFlying(true);
             }, 1L);
     }
 
@@ -421,6 +430,12 @@ public class PlayersListener implements Listener {
 
         e.setCancelled(true);
 
+        if (e.getPlayer().isSneaking()) {
+            Message.SCHEMATIC_SPAWN_SELECT.send(superiorPlayer, Formatters.LOCATION_FORMATTER.format(e.getPlayer().getLocation()));
+            superiorPlayer.setSchematicSpawnLocation(e.getPlayer().getLocation());
+            return;
+        }
+
         if (e.getAction() == Action.RIGHT_CLICK_BLOCK || e.getAction() == Action.RIGHT_CLICK_AIR) {
             Message.SCHEMATIC_RIGHT_SELECT.send(superiorPlayer, Formatters.LOCATION_FORMATTER.format(e.getClickedBlock().getLocation()));
             superiorPlayer.setSchematicPos1(e.getClickedBlock());
@@ -429,7 +444,7 @@ public class PlayersListener implements Listener {
             superiorPlayer.setSchematicPos2(e.getClickedBlock());
         }
 
-        if (superiorPlayer.getSchematicPos1() != null && superiorPlayer.getSchematicPos2() != null)
+        if (superiorPlayer.getSchematicPos1() != null && superiorPlayer.getSchematicPos2() != null && superiorPlayer.getSchematicSpawnLocation() != null)
             Message.SCHEMATIC_READY_TO_CREATE.send(superiorPlayer);
     }
 

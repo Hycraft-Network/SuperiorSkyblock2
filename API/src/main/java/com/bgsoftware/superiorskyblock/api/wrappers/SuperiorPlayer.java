@@ -73,6 +73,16 @@ public interface SuperiorPlayer extends IMissionsHolder, IPersistentDataHolder, 
     long getLastTimeStatus();
 
     /**
+     * Update the last time the player updated his data.
+     */
+    void setLastIslandCreated(long lastIslandCreated);
+
+    /**
+     * Get the last time the player created an island.
+     */
+    long getLastIslandCreated();
+
+    /**
      * Update the cached name with the current player's name.
      * When the player is offline, nothing will happen.
      */
@@ -547,6 +557,21 @@ public interface SuperiorPlayer extends IMissionsHolder, IPersistentDataHolder, 
      */
     void setSchematicPos2(@Nullable Block block);
 
+
+    /**
+     * Get the schematic spawn location of the player.
+     *
+     * @param location The location to set.
+     */
+    void setSchematicSpawnLocation(Location location);
+
+    /**
+     * Get the schematic spawn location of the player.
+     *
+     * @return The location that was set.
+     */
+    Location getSchematicSpawnLocation();
+
     /*
      *   Data Methods
      */
@@ -685,6 +710,10 @@ public interface SuperiorPlayer extends IMissionsHolder, IPersistentDataHolder, 
         Builder setLastTimeUpdated(long lastTimeUpdated);
 
         long getLastTimeUpdated();
+
+        Builder setLastIslandCreated(long lastIslandCreated);
+
+        long getLastIslandCreated();
 
         Builder setToggledPanel(boolean toggledPanel);
 

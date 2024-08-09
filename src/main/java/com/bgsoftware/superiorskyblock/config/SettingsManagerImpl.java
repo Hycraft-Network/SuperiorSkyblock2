@@ -374,6 +374,11 @@ public class SettingsManagerImpl extends Manager implements SettingsManager {
     }
 
     @Override
+    public long getCreationIslandCooldown() {
+        return this.global.getCreationIslandCooldown();
+    }
+
+    @Override
     public List<String> getPvPWorlds() {
         return this.global.getPvPWorlds();
     }

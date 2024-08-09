@@ -291,6 +291,7 @@ public class GridManagerImpl extends Manager implements GridManager {
 
         Island island = islandCreationResult.getIsland();
         Location islandLocation = islandCreationResult.getIslandLocation();
+                    Location spawnLocation = islandCreationResult.getSpawnLocation();
         boolean teleportPlayer = islandCreationResult.shouldTeleportPlayer();
 
         List<ChunkPosition> affectedChunks = schematic instanceof BaseSchematic ?
@@ -318,7 +319,7 @@ public class GridManagerImpl extends Manager implements GridManager {
 
         IslandsDatabaseBridge.insertIsland(island, affectedChunks);
 
-        Location homeLocation = schematic.adjustRotation(islandLocation);
+        Location homeLocation = schematic.adjustRotation(spawnLocation);
         if (spawnOffset != null)
             homeLocation = spawnOffset.applyToLocation(homeLocation);
 
@@ -332,7 +333,7 @@ public class GridManagerImpl extends Manager implements GridManager {
                 Log.debugResult(Debug.CREATE_ISLAND, "Creation Callback", "Do not teleport player");
 
                 Message.CREATE_ISLAND.send(builder.owner, Formatters.LOCATION_FORMATTER.format(
-                        islandLocation), System.currentTimeMillis() - startTime);
+                        spawnLocation), System.currentTimeMillis() - startTime);
             } else {
                 Log.debugResult(Debug.CREATE_ISLAND, "Creation Callback", "Teleporting player");
 
@@ -341,7 +342,7 @@ public class GridManagerImpl extends Manager implements GridManager {
                             "Teleported player. Result: " + result);
 
                     Message.CREATE_ISLAND.send(builder.owner, Formatters.LOCATION_FORMATTER.format(
-                            islandLocation), System.currentTimeMillis() - startTime);
+                            spawnLocation), System.currentTimeMillis() - startTime);
 
                     if (result) {
                         if (affectedChunks != null) {
@@ -357,6 +358,8 @@ public class GridManagerImpl extends Manager implements GridManager {
                             plugin.getNMSDragonFight().awardTheEndAchievement(player);
                             this.dragonBattleService.get().resetEnderDragonBattle(island, defaultDimension);
                         }
+
+                        plugin.getEventsBus().callPostIslandCreateEvent(builder.owner, island);
                     }
                 });
             }

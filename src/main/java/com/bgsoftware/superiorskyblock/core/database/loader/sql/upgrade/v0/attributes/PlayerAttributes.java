@@ -20,6 +20,7 @@ public class PlayerAttributes extends AttributesRegistry<PlayerAttributes.Field>
         ISLAND_ROLE,
         DISBANDS,
         LAST_TIME_UPDATED,
+        LAST_ISLAND_CREATED,
         COMPLETED_MISSIONS,
         TOGGLED_PANEL,
         ISLAND_FLY,
