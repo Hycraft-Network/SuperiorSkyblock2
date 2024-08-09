@@ -305,7 +305,7 @@ public class GridManagerImpl extends Manager implements GridManager {
         try {
             island.getDatabaseBridge().setDatabaseBridgeMode(DatabaseBridgeMode.IDLE);
 
-            island.setBiome(biome);
+            island.setBiome(biome, false);
             island.setSchematicGenerate(plugin.getSettings().getWorlds().getDefaultWorldDimension());
             island.setCurrentlyActive(true);
 
@@ -345,8 +345,12 @@ public class GridManagerImpl extends Manager implements GridManager {
                             spawnLocation), System.currentTimeMillis() - startTime);
 
                     if (result) {
-                        if (affectedChunks != null)
-                            BukkitExecutor.sync(() -> IslandUtils.resetChunksExcludedFromList(island, affectedChunks), 10L);
+                        if (affectedChunks != null) {
+                            BukkitExecutor.sync(() -> {
+                                IslandUtils.resetChunksExcludedFromList(island, affectedChunks);
+                                island.setBiome(biome, true);
+                            }, 10L);
+                        }
 
                         Dimension defaultDimension = plugin.getSettings().getWorlds().getDefaultWorldDimension();
 
@@ -354,6 +358,8 @@ public class GridManagerImpl extends Manager implements GridManager {
                             plugin.getNMSDragonFight().awardTheEndAchievement(player);
                             this.dragonBattleService.get().resetEnderDragonBattle(island, defaultDimension);
                         }
+
+                        plugin.getEventsBus().callPostIslandCreateEvent(builder.owner, island);
                     }
                 });
             }
