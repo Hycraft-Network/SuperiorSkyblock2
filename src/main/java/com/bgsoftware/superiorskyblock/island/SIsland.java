@@ -1330,7 +1330,7 @@ public class SIsland implements Island {
     public boolean isInside(Location location) {
         Preconditions.checkNotNull(location, "location parameter cannot be null.");
 
-        if (location.getWorld() == null || !plugin.getGrid().isIslandsWorld(location.getWorld()))
+        if (!isIslandWorld(location.getWorld()))
             return false;
 
         int islandDistance = (int) Math.round(plugin.getSettings().getMaxIslandSize() *
@@ -1344,7 +1344,7 @@ public class SIsland implements Island {
     public boolean isInside(World world, int chunkX, int chunkZ) {
         Preconditions.checkNotNull(world, "world parameter cannot be null.");
 
-        if (!plugin.getGrid().isIslandsWorld(world))
+        if (!isIslandWorld(world))
             return false;
 
         int islandDistance = (int) Math.round(plugin.getSettings().getMaxIslandSize() *
@@ -1371,7 +1371,7 @@ public class SIsland implements Island {
     }
 
     public boolean isInsideRange(Location location, int extra) {
-        if (location.getWorld() == null || !plugin.getGrid().isIslandsWorld(location.getWorld()))
+        if (!isIslandWorld(location.getWorld()))
             return false;
 
         IslandArea islandArea = new IslandArea(center, getIslandSize());
@@ -1384,13 +1384,28 @@ public class SIsland implements Island {
     public boolean isInsideRange(Chunk chunk) {
         Preconditions.checkNotNull(chunk, "chunk parameter cannot be null.");
 
-        if (chunk.getWorld() == null || !plugin.getGrid().isIslandsWorld(chunk.getWorld()))
+        if (!isIslandWorld(chunk.getWorld()))
             return false;
 
         IslandArea islandArea = new IslandArea(center, getIslandSize());
         islandArea.rshift(4);
 
         return islandArea.intercepts(chunk.getX(), chunk.getZ());
+    }
+
+    private boolean isIslandWorld(@Nullable World world) {
+        if (world == null)
+            return false;
+
+        Dimension dimension = plugin.getGrid().getIslandsWorldDimension(world);
+        if (dimension == null)
+            return false;
+
+        World islandWorld = plugin.getGrid().getIslandsWorld(this, dimension);
+        if (!Objects.equals(world, islandWorld))
+            return false;
+
+        return true;
     }
 
     @Override
@@ -4732,16 +4747,11 @@ public class SIsland implements Island {
 
     private void clearUpgrades(boolean overrideCustom) {
         if (overrideCustom || this.islandSize.get().isSynced()) {
-            if (overrideCustom)
-                IslandsDatabaseBridge.saveSize(this);
-
             setIslandSizeInternal(IntValue.syncedFixed(-1));
         }
 
         warpsLimit.set(warpsLimit -> {
             if (overrideCustom || warpsLimit.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveWarpsLimit(this);
                 return IntValue.syncedFixed(-1);
             }
             return warpsLimit;
@@ -4749,8 +4759,6 @@ public class SIsland implements Island {
 
         teamLimit.set(teamLimit -> {
             if (overrideCustom || teamLimit.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveTeamLimit(this);
                 return IntValue.syncedFixed(-1);
             }
             return teamLimit;
@@ -4758,8 +4766,6 @@ public class SIsland implements Island {
 
         coopLimit.set(coopLimit -> {
             if (overrideCustom || coopLimit.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveCoopLimit(this);
                 return IntValue.syncedFixed(-1);
             }
             return coopLimit;
@@ -4767,9 +4773,6 @@ public class SIsland implements Island {
 
         cropGrowth.set(cropGrowth -> {
             if (overrideCustom || cropGrowth.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveCropGrowth(this);
-
                 notifyCropGrowthChange(-1D);
 
                 return DoubleValue.syncedFixed(-1D);
@@ -4780,8 +4783,6 @@ public class SIsland implements Island {
 
         spawnerRates.set(spawnerRates -> {
             if (overrideCustom || spawnerRates.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveSpawnerRates(this);
                 return DoubleValue.syncedFixed(-1D);
             }
             return spawnerRates;
@@ -4789,8 +4790,6 @@ public class SIsland implements Island {
 
         mobDrops.set(mobDrops -> {
             if (overrideCustom || mobDrops.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveMobDrops(this);
                 return DoubleValue.syncedFixed(-1D);
             }
             return mobDrops;
@@ -4798,8 +4797,6 @@ public class SIsland implements Island {
 
         bankLimit.set(bankLimit -> {
             if (overrideCustom || bankLimit.isSynced()) {
-                if (overrideCustom)
-                    IslandsDatabaseBridge.saveBankLimit(this);
                 return Value.syncedFixed(SYNCED_BANK_LIMIT_VALUE);
             }
             return bankLimit;
@@ -4828,6 +4825,9 @@ public class SIsland implements Island {
         roleLimits.entrySet().stream()
                 .filter(entry -> overrideCustom || entry.getValue().isSynced())
                 .forEach(entry -> entry.setValue(IntValue.syncedFixed(-1)));
+
+        if (overrideCustom)
+            IslandsDatabaseBridge.clearIslandSettings(this);
     }
 
     private void syncUpgrade(SUpgradeLevel upgradeLevel, boolean overrideCustom) {
