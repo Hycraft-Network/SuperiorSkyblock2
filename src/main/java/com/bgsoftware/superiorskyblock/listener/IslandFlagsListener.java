@@ -244,6 +244,7 @@ public class IslandFlagsListener implements Listener {
         Player player = event.getPlayer();
         Island island = plugin.getGrid().getIslandAt(player.getLocation());
 
+        if (island == null) return;
         if (!island.hasPermission(player, IslandPrivileges.BYPASS_FLY_ALLOWED)) return;
         if (!preventAction(player.getLocation(), IslandFlags.ALLOW_FLYING)) return;
 
@@ -296,6 +297,12 @@ public class IslandFlagsListener implements Listener {
         }
     }
 
+    private enum Flag {
+
+        ALLOW_OUTSIDE
+
+    }
+
     private class PaperListener implements Listener {
 
         @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -305,12 +312,6 @@ public class IslandFlagsListener implements Listener {
                 e.setShouldAbortSpawn(true);
             }
         }
-
-    }
-
-    private enum Flag {
-
-        ALLOW_OUTSIDE
 
     }
 
