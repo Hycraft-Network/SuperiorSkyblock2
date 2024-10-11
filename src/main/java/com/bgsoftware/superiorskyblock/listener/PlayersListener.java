@@ -273,8 +273,15 @@ public class PlayersListener implements Listener {
         Island island = plugin.getGrid().getIslandAt(player.getLocation());
         SuperiorPlayer superiorPlayer = plugin.getPlayers().getSuperiorPlayer(player);
 
-        if (island != null && superiorPlayer.hasIslandFlyEnabled() && !player.getAllowFlight() &&
-                island.hasPermission(superiorPlayer, IslandPrivileges.FLY))
+        if (island == null) {
+            BukkitExecutor.sync(() -> {
+                player.setAllowFlight(false);
+                player.setFlying(false);
+            }, 1L);
+            return;
+        }
+
+        if (superiorPlayer.hasIslandFlyEnabled() && !player.getAllowFlight() && island.hasPermission(superiorPlayer, IslandPrivileges.FLY))
             BukkitExecutor.sync(() -> {
                 player.setAllowFlight(true);
                 player.setFlying(true);
