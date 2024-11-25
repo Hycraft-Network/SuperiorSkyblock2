@@ -96,7 +96,7 @@ public class DefaultIslandCreationAlgorithm implements IslandCreationAlgorithm {
 
         if (event.isCancelled()) {
             Log.debugResult(Debug.CREATE_ISLAND, "Creation Failed", "Event was cancelled for creating the island '" + builder.islandName + "'.");
-            return CompletableFuture.completedFuture(new IslandCreationResult(IslandCreationResult.Status.EVENT_CANCELLED, null, null, false));
+            return CompletableFuture.completedFuture(new IslandCreationResult(IslandCreationResult.Status.EVENT_CANCELLED, null, null, spawnLocation, false));
         }
 
         CompletableFuture<IslandCreationResult> completableFuture = new CompletableFuture<>();
@@ -104,7 +104,7 @@ public class DefaultIslandCreationAlgorithm implements IslandCreationAlgorithm {
         schematic.pasteSchematic(island, islandLocation.getBlock().getRelative(BlockFace.DOWN).getLocation(), () -> {
             plugin.getProviders().getWorldsProvider().finishIslandCreation(islandLocation,
                     builder.owner.getUniqueId(), builder.uuid);
-            completableFuture.complete(new IslandCreationResult(IslandCreationResult.Status.SUCCESS, island, islandLocation, event.getResult()));
+            completableFuture.complete(new IslandCreationResult(IslandCreationResult.Status.SUCCESS, island, islandLocation, spawnLocation, event.getResult()));
             island.getDatabaseBridge().setDatabaseBridgeMode(DatabaseBridgeMode.SAVE_DATA);
             Profiler.end(profiler);
         }, error -> {
