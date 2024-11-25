@@ -49,7 +49,6 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -213,6 +212,7 @@ public class SettingsContainer {
     public final List<RespawnAction> playerRespawnActions;
     public final BigInteger blockCountsSaveThreshold;
     public final long creationIslandCooldown;
+    public final boolean chatSigningSupport;
 
     public SettingsContainer(SuperiorSkyblockPlugin plugin, YamlConfiguration config) throws ManagerLoadException {
         databaseType = config.getString("database.type").toUpperCase(Locale.ENGLISH);
@@ -521,6 +521,7 @@ public class SettingsContainer {
         });
         blockCountsSaveThreshold = BigInteger.valueOf(config.getInt("block-counts-save-threshold", 100));
         creationIslandCooldown = config.getLong("creation-island-cooldown", 30L);
+        chatSigningSupport = config.getBoolean("chat-signing-support", true);
     }
 
     private List<String> loadInteractables(SuperiorSkyblockPlugin plugin) {

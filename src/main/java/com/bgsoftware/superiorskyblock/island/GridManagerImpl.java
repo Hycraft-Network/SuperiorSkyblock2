@@ -25,6 +25,7 @@ import com.bgsoftware.superiorskyblock.core.LazyWorldLocation;
 import com.bgsoftware.superiorskyblock.core.Manager;
 import com.bgsoftware.superiorskyblock.core.SBlockPosition;
 import com.bgsoftware.superiorskyblock.core.SequentialListBuilder;
+import com.bgsoftware.superiorskyblock.core.collections.EnumerateSet;
 import com.bgsoftware.superiorskyblock.core.database.DatabaseResult;
 import com.bgsoftware.superiorskyblock.core.database.bridge.GridDatabaseBridge;
 import com.bgsoftware.superiorskyblock.core.database.bridge.IslandsDatabaseBridge;
@@ -35,6 +36,7 @@ import com.bgsoftware.superiorskyblock.core.logging.Log;
 import com.bgsoftware.superiorskyblock.core.messages.Message;
 import com.bgsoftware.superiorskyblock.core.serialization.Serializers;
 import com.bgsoftware.superiorskyblock.core.threads.BukkitExecutor;
+import com.bgsoftware.superiorskyblock.core.threads.Synchronized;
 import com.bgsoftware.superiorskyblock.island.algorithm.DefaultIslandCreationAlgorithm;
 import com.bgsoftware.superiorskyblock.island.builder.IslandBuilderImpl;
 import com.bgsoftware.superiorskyblock.island.preview.IslandPreviews;
@@ -53,7 +55,9 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
+import org.bukkit.configuration.file.YamlConfiguration;
 
+import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -66,6 +70,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 public class GridManagerImpl extends Manager implements GridManager {
@@ -90,6 +95,8 @@ public class GridManagerImpl extends Manager implements GridManager {
 
     private Island spawnIsland;
     private SBlockPosition lastIsland;
+    @Nullable
+    private UUID serverUUID;
 
     private BigDecimal totalWorth = BigDecimal.ZERO;
     private long lastTimeWorthUpdate = 0;
@@ -101,6 +108,13 @@ public class GridManagerImpl extends Manager implements GridManager {
     private boolean forceSort = false;
 
     private final List<SortingType> pendingSortingTypes = new LinkedList<>();
+    private final AtomicInteger activeCalcTasks = new AtomicInteger(0);
+    private final LazyReference<Synchronized<EnumerateSet<SortingType>>> activeSortingTasks = new LazyReference<Synchronized<EnumerateSet<SortingType>>>() {
+        @Override
+        protected Synchronized<EnumerateSet<SortingType>> create() {
+            return Synchronized.of(new EnumerateSet<>(SortingType.values()));
+        }
+    };
 
     public GridManagerImpl(SuperiorSkyblockPlugin plugin, IslandsPurger islandsPurger, IslandPreviews islandPreviews) {
         super(plugin);
@@ -117,6 +131,8 @@ public class GridManagerImpl extends Manager implements GridManager {
         if (this.islandCreationAlgorithm == null)
             this.islandCreationAlgorithm = DefaultIslandCreationAlgorithm.getInstance();
 
+        loadServerUuid();
+
         this.lastIsland = new SBlockPosition(plugin.getSettings().getWorlds().getDefaultWorldName(), 0, 100, 0);
         BukkitExecutor.sync(this::updateSpawn);
     }
@@ -131,6 +147,10 @@ public class GridManagerImpl extends Manager implements GridManager {
 
     public void syncUpgrades() {
         getIslands().forEach(Island::updateUpgrades);
+    }
+
+    public UUID getServerUUID() {
+        return serverUUID;
     }
 
     @Override
@@ -282,6 +302,10 @@ public class GridManagerImpl extends Manager implements GridManager {
                 builder.owner.setIsland(null);
                 Message.ISLAND_ALREADY_EXIST.send(builder.owner);
                 Log.debugResult(Debug.CREATE_ISLAND, "Creation Callback", "Island already exists");
+                return;
+            case EVENT_CANCELLED:
+                builder.owner.setIsland(null);
+                Log.debugResult(Debug.CREATE_ISLAND, "Creation Callback", "Island creation event was cancelled");
                 return;
             case SUCCESS:
                 break;
@@ -627,8 +651,20 @@ public class GridManagerImpl extends Manager implements GridManager {
 
         Log.debug(Debug.SORT_ISLANDS, sortingType.getName());
 
+        boolean isSortedAlready = activeSortingTasks.get().readAndGet(
+                activeSortingTasks -> activeSortingTasks.contains(sortingType));
+        if (isSortedAlready) {
+            if (onFinish != null)
+                onFinish.run();
+            forceSort = false;
+            return;
+        }
+
+        activeSortingTasks.get().write(activeSortingTasks -> activeSortingTasks.add(sortingType));
+
         this.islandsContainer.sortIslands(sortingType, forceSort, () -> {
             plugin.getMenus().refreshTopIslands(sortingType);
+            activeSortingTasks.get().write(activeSortingTasks -> activeSortingTasks.remove(sortingType));
             if (onFinish != null)
                 onFinish.run();
         });
@@ -812,6 +848,17 @@ public class GridManagerImpl extends Manager implements GridManager {
         }
     }
 
+    public void startCalcTask() {
+        this.activeCalcTasks.incrementAndGet();
+    }
+
+    public boolean stopCalcTask() {
+        int activeCalcTasks = this.activeCalcTasks.decrementAndGet();
+        if (activeCalcTasks < 0)
+            throw new IllegalStateException();
+        return activeCalcTasks == 0;
+    }
+
     @Override
     public void addIslandToPurge(Island island) {
         Preconditions.checkNotNull(island, "island parameter cannot be null.");
@@ -989,6 +1036,21 @@ public class GridManagerImpl extends Manager implements GridManager {
     private void initializeDatabaseBridge() {
         databaseBridge = plugin.getFactory().createDatabaseBridge(this);
         databaseBridge.setDatabaseBridgeMode(DatabaseBridgeMode.SAVE_DATA);
+    }
+
+    private void loadServerUuid() {
+        File bStatsFile = new File(plugin.getDataFolder().getParentFile(), "bStats/config.yml");
+        if (!bStatsFile.exists())
+            return;
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(bStatsFile);
+        if (!config.isString("serverUuid"))
+            return;
+
+        try {
+            this.serverUUID = UUID.fromString(config.getString("serverUuid"));
+        } catch (Exception ignored) {
+        }
     }
 
 }

@@ -1,7 +1,11 @@
 package com.bgsoftware.superiorskyblock.nms.v1_16_R3;
 
 import com.bgsoftware.superiorskyblock.SuperiorSkyblockPlugin;
+import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.key.Key;
+import com.bgsoftware.superiorskyblock.api.wrappers.SuperiorPlayer;
+import com.bgsoftware.superiorskyblock.core.formatting.Formatters;
+import com.bgsoftware.superiorskyblock.core.formatting.impl.ChatFormatter;
 import com.bgsoftware.superiorskyblock.core.io.ClassProcessor;
 import com.bgsoftware.superiorskyblock.nms.NMSAlgorithms;
 import com.bgsoftware.superiorskyblock.nms.algorithms.PaperGlowEnchantment;
@@ -11,6 +15,10 @@ import com.bgsoftware.superiorskyblock.nms.v1_16_R3.menu.MenuTileEntityDispenser
 import com.bgsoftware.superiorskyblock.nms.v1_16_R3.menu.MenuTileEntityFurnace;
 import com.bgsoftware.superiorskyblock.nms.v1_16_R3.menu.MenuTileEntityHopper;
 import com.bgsoftware.superiorskyblock.nms.v1_16_R3.world.KeyBlocksCache;
+import io.papermc.paper.chat.ChatComposer;
+import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.minecraft.server.v1_16_R3.Block;
 import net.minecraft.server.v1_16_R3.BlockPosition;
 import net.minecraft.server.v1_16_R3.EntityFallingBlock;
@@ -19,6 +27,7 @@ import net.minecraft.server.v1_16_R3.IBlockData;
 import net.minecraft.server.v1_16_R3.IChatBaseComponent;
 import net.minecraft.server.v1_16_R3.IInventory;
 import net.minecraft.server.v1_16_R3.IRegistry;
+import net.minecraft.server.v1_16_R3.MinecraftServer;
 import net.minecraft.server.v1_16_R3.World;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -33,17 +42,21 @@ import org.bukkit.craftbukkit.v1_16_R3.util.CraftChatMessage;
 import org.bukkit.craftbukkit.v1_16_R3.util.CraftMagicNumbers;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.FallingBlock;
+import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionEffect;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.EnumMap;
 import java.util.function.BiFunction;
 
 public class NMSAlgorithmsImpl implements NMSAlgorithms {
+
+    private static final SuperiorSkyblockPlugin plugin = SuperiorSkyblockPlugin.getPlugin();
 
     private static final EnumMap<InventoryType, MenuCreator> MENUS_HOLDER_CREATORS = new EnumMap<>(InventoryType.class);
 
@@ -63,12 +76,6 @@ public class NMSAlgorithmsImpl implements NMSAlgorithms {
             return Bukkit.getUnsafe().processClass(plugin.getDescription(), path, classBytes);
         }
     };
-
-    private final SuperiorSkyblockPlugin plugin;
-
-    public NMSAlgorithmsImpl(SuperiorSkyblockPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @Override
     public void registerCommand(BukkitCommand command) {
@@ -163,7 +170,12 @@ public class NMSAlgorithmsImpl implements NMSAlgorithms {
 
     @Override
     public double getCurrentTps() {
-        return Bukkit.getTPS()[0];
+        try {
+            return MinecraftServer.getServer().tps1.getAverage();
+        } catch (Throwable error) {
+            //noinspection removal
+            return MinecraftServer.getServer().recentTps[0];
+        }
     }
 
     @Override
@@ -177,12 +189,49 @@ public class NMSAlgorithmsImpl implements NMSAlgorithms {
     }
 
     @Override
+    public void handlePaperChatRenderer(Object event) {
+        if (!(event instanceof AsyncChatEvent))
+            return;
+
+        ChatComposer originalComposer = ((AsyncChatEvent) event).composer();
+        ((AsyncChatEvent) event).composer(new ChatComposerWrapper(originalComposer).composer);
+    }
+
+    @Override
     public Object createMenuInventoryHolder(InventoryType inventoryType, InventoryHolder defaultHolder, String title) {
         MenuCreator menuCreator = MENUS_HOLDER_CREATORS.get(inventoryType);
         return menuCreator == null ? null : menuCreator.apply(defaultHolder, title);
     }
 
     private interface MenuCreator extends BiFunction<InventoryHolder, String, IInventory> {
+
+    }
+
+    private static class ChatComposerWrapper {
+
+        private final ChatComposer composer = new ChatComposer() {
+
+            @Override
+            public @NotNull Component composeChat(@NotNull Player source,
+                                                  @NotNull Component sourceDisplayName,
+                                                  @NotNull Component message) {
+                String originalFormat = LegacyComponentSerializer.legacyAmpersand().serialize(
+                        originalComposer.composeChat(source, sourceDisplayName, message));
+
+                SuperiorPlayer superiorPlayer = plugin.getPlayers().getSuperiorPlayer(source);
+                Island island = superiorPlayer.getIsland();
+
+                return LegacyComponentSerializer.legacyAmpersand().deserialize(
+                        Formatters.CHAT_FORMATTER.format(new ChatFormatter.ChatFormatArgs(originalFormat, superiorPlayer, island)));
+            }
+
+        };
+
+        private final ChatComposer originalComposer;
+
+        public ChatComposerWrapper(ChatComposer originalComposer) {
+            this.originalComposer = originalComposer;
+        }
 
     }
 

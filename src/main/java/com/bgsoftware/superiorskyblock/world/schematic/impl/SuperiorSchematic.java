@@ -5,9 +5,11 @@ import com.bgsoftware.superiorskyblock.api.key.Key;
 import com.bgsoftware.superiorskyblock.api.key.KeyMap;
 import com.bgsoftware.superiorskyblock.api.schematic.Schematic;
 import com.bgsoftware.superiorskyblock.api.wrappers.BlockOffset;
+import com.bgsoftware.superiorskyblock.core.BigBitSet;
+import com.bgsoftware.superiorskyblock.core.ByteBigArray;
 import com.bgsoftware.superiorskyblock.core.ChunkPosition;
 import com.bgsoftware.superiorskyblock.core.SBlockOffset;
-import com.bgsoftware.superiorskyblock.core.SequentialListBuilder;
+import com.bgsoftware.superiorskyblock.core.VarintArray;
 import com.bgsoftware.superiorskyblock.core.logging.Debug;
 import com.bgsoftware.superiorskyblock.core.logging.Log;
 import com.bgsoftware.superiorskyblock.core.profiler.ProfileType;
@@ -34,13 +36,20 @@ import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class SuperiorSchematic extends BaseSchematic implements Schematic {
+
+    private static final ByteBigArray EMPTY_BLOCK_IDS = new ByteBigArray((short) 0);
+    private static final BigBitSet EMPTY_BIT_SET = new BigBitSet(0);
 
     private final Data data;
 
@@ -68,24 +77,82 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
         int dataVersion = compoundTag.getInt("minecraftDataVersion", -1);
 
-        List<SchematicBlockData> blocks;
+        ByteBigArray blockIds;
+        BigBitSet bitSet;
+        Map<BlockOffset, SchematicBlock.Extra> extra;
+        int minX;
+        int minY;
+        int minZ;
+
         ListTag blocksList = compoundTag.getList("blocks");
         if (blocksList == null) {
-            blocks = Collections.emptyList();
+            blockIds = EMPTY_BLOCK_IDS;
+            bitSet = EMPTY_BIT_SET;
+            extra = Collections.emptyMap();
+            minX = 0;
+            minY = 0;
+            minZ = 0;
         } else {
-            LinkedList<SchematicBlockData> schematicBlocks = new LinkedList<>();
+            minX = Integer.MAX_VALUE;
+            minY = Integer.MAX_VALUE;
+            minZ = Integer.MAX_VALUE;
+
+            int maxX = Integer.MIN_VALUE;
+            int maxY = Integer.MIN_VALUE;
+            int maxZ = Integer.MIN_VALUE;
+
+            TreeSet<SchematicBlockData> schematicBlocks = new TreeSet<>(Comparator.naturalOrder());
 
             for (Tag<?> tag : blocksList) {
                 SchematicBlockData schematicBlock = SuperiorSchematicDeserializer.deserializeSchematicBlock((CompoundTag) tag, dataVersion);
                 if (schematicBlock != null && schematicBlock.getCombinedId() > 0) {
                     schematicBlocks.add(schematicBlock);
                     readBlock(schematicBlock);
+
+                    // Compute the min and max block offset as we want to shrink as much as possible the amount
+                    // of blocks in the schematic in memory. This will give us a layout of blocks that do not
+                    // include any AIR blocks at all.
+                    BlockOffset blockOffset = schematicBlock.getBlockOffset();
+                    minX = Math.min(blockOffset.getOffsetX(), minX);
+                    minY = Math.min(blockOffset.getOffsetY(), minY);
+                    minZ = Math.min(blockOffset.getOffsetZ(), minZ);
+                    maxX = Math.max(blockOffset.getOffsetX(), maxX);
+                    maxY = Math.max(blockOffset.getOffsetY(), maxY);
+                    maxZ = Math.max(blockOffset.getOffsetZ(), maxZ);
                 }
             }
 
-            blocks = new SequentialListBuilder<SchematicBlockData>()
-                    .sorted(SchematicBlockData::compareTo)
-                    .build(schematicBlocks);
+            // The xSize,ySize,zSize in the schematic consider air blocks, however we do not want them.
+            // Therefore, we adjust the sizes accordingly to the actual blocks in the schematic.
+            xSize = maxX - minX + 1;
+            ySize = maxY - minY + 1;
+            zSize = maxZ - minZ + 1;
+            if ((long) xSize * (long) ySize * (long) zSize > Integer.MAX_VALUE) {
+                throw new IllegalStateException("Cannot create such large schematic of size " + xSize + "x" + ySize + "x" + zSize);
+            }
+
+            VarintArray blockIdsVarintArray = new VarintArray();
+            bitSet = new BigBitSet(xSize * ySize * zSize);
+            extra = new HashMap<>();
+
+            for (SchematicBlockData schematicBlock : schematicBlocks) {
+                BlockOffset blockOffset = schematicBlock.getBlockOffset();
+
+                int x = blockOffset.getOffsetX() - minX;
+                int y = blockOffset.getOffsetY() - minY;
+                int z = blockOffset.getOffsetZ() - minZ;
+
+                // Calculate index in the BitSet for the given x,y,z.
+                // The BitSet is sorted similar to how SchematicBlockData#compareTo is implemented.
+                int index = y * (xSize * zSize) + x * zSize + z;
+                bitSet.set(index);
+                blockIdsVarintArray.add(schematicBlock.getCombinedId());
+
+                if (schematicBlock.getExtra() != null)
+                    extra.put(blockOffset, schematicBlock.getExtra());
+            }
+
+            blockIds = blockIdsVarintArray.toArray();
         }
 
         List<SchematicEntity> entities;
@@ -110,7 +177,8 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
             }
         }
 
-        this.data = new Data(schematicOffset, spawn, yaw, pitch, blocks, entities);
+        this.data = new Data(schematicOffset, spawn, yaw, pitch, bitSet, blockIds,
+                xSize, ySize, zSize, minX, minY, minZ, extra, entities);
     }
 
     private SuperiorSchematic(String name, Data data, KeyMap<Integer> cachedCounts) {
@@ -130,7 +198,7 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
             return;
         }
 
-        long profiler = Profiler.start(ProfileType.SCHEMATIC_PLACE);
+        long profiler = Profiler.start(ProfileType.SCHEMATIC_PLACE, getName());
 
         Log.debug(Debug.PASTE_SCHEMATIC, this.name, island.getOwner().getName(), location);
 
@@ -150,9 +218,20 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
         List<Runnable> finishTasks = new LinkedList<>();
 
-        this.data.blocks.forEach(schematicBlockData -> {
-            Location blockLocation = schematicBlockData.getBlockOffset().applyToLocation(min.clone());
-            SchematicBlock schematicBlock = new SchematicBlock(blockLocation, schematicBlockData);
+        long placeProfiler = Profiler.start(ProfileType.SCHEMATIC_BLOCKS_PLACE, getName());
+
+        VarintArray.Itr blockIdsIterator = new VarintArray(this.data.blockIds).iterator();
+
+        for (int i = this.data.bitSet.nextSetBit(0); i >= 0; i = this.data.bitSet.nextSetBit(i + 1)) {
+            int x = ((i / this.data.zSize) % this.data.xSize) + this.data.minX;
+            int y = (i / (this.data.xSize * this.data.zSize)) + this.data.minY;
+            int z = (i % this.data.zSize) + this.data.minZ;
+
+            BlockOffset blockOffset = SBlockOffset.fromOffsets(x, y, z);
+
+            Location blockLocation = blockOffset.applyToLocation(min.clone());
+            SchematicBlock schematicBlock = new SchematicBlock(blockLocation,
+                    (int) blockIdsIterator.next(), data.extra.get(blockOffset));
 
             schematicBlock.doPrePlace(island);
 
@@ -161,7 +240,12 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
 
             if (schematicBlock.shouldPostPlace())
                 finishTasks.add(() -> schematicBlock.doPostPlace(island));
-        });
+        }
+
+        if (blockIdsIterator.hasNext())
+            throw new IllegalStateException("Not all blocks were read from varint iterator");
+
+        Profiler.end(placeProfiler);
 
         List<ChunkPosition> affectedChunks = worldEditSession.getAffectedChunks();
         List<CompletableFuture<Chunk>> chunkFutures = new ArrayList<>(affectedChunks.size());
@@ -270,15 +354,36 @@ public class SuperiorSchematic extends BaseSchematic implements Schematic {
         private final Vector spawn;
         private final float yaw;
         private final float pitch;
-        private final List<SchematicBlockData> blocks;
+
+        private final BigBitSet bitSet;
+        private final ByteBigArray blockIds;
+        private final Map<BlockOffset, SchematicBlock.Extra> extra;
         private final List<SchematicEntity> entities;
 
-        Data(BlockOffset offset, Vector spawn, float yaw, float pitch, List<SchematicBlockData> blocks, List<SchematicEntity> entities) {
+        /* Required to deserialize the bitset */
+        private final int minX;
+        private final int minY;
+        private final int minZ;
+        private final int xSize;
+        private final int ySize;
+        private final int zSize;
+
+        Data(BlockOffset offset, Vector spawn, float yaw, float pitch,
+             BigBitSet bitSet, ByteBigArray blockIds, int xSize, int ySize, int zSize, int minX, int minY, int minZ,
+             Map<BlockOffset, SchematicBlock.Extra> extra, List<SchematicEntity> entities) {
             this.offset = offset;
             this.spawn = spawn;
             this.yaw = yaw;
             this.pitch = pitch;
-            this.blocks = Collections.unmodifiableList(blocks);
+            this.bitSet = bitSet;
+            this.blockIds = blockIds;
+            this.minX = minX;
+            this.minY = minY;
+            this.minZ = minZ;
+            this.xSize = xSize;
+            this.ySize = ySize;
+            this.zSize = zSize;
+            this.extra = Collections.unmodifiableMap(extra);
             this.entities = Collections.unmodifiableList(entities);
         }
 

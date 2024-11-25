@@ -1,5 +1,6 @@
 package com.bgsoftware.superiorskyblock.nms.v1_19;
 
+import com.bgsoftware.common.annotations.Nullable;
 import com.bgsoftware.common.reflection.ReflectField;
 import com.bgsoftware.common.reflection.ReflectMethod;
 import com.bgsoftware.superiorskyblock.SuperiorSkyblockPlugin;
@@ -34,6 +35,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.ProtoChunk;
@@ -67,8 +69,6 @@ public class NMSUtils {
             ChunkMap.class, Map.class, Modifier.PUBLIC | Modifier.VOLATILE, 1);
     private static final ReflectMethod<LevelChunk> CHUNK_CACHE_SERVER_GET_CHUNK_IF_CACHED = new ReflectMethod<>(
             ServerChunkCache.class, "getChunkAtIfCachedImmediately", int.class, int.class);
-    private static final ReflectMethod<LevelChunk> CRAFT_CHUNK_GET_HANDLE = new ReflectMethod<>(
-            CraftChunk.class, LevelChunk.class, "getHandle");
     private static final ReflectField<PersistentEntitySectionManager<Entity>> SERVER_LEVEL_ENTITY_MANAGER = new ReflectField<>(
             ServerLevel.class, PersistentEntitySectionManager.class, Modifier.PUBLIC | Modifier.FINAL, 1);
     private static final ReflectField<IOWorker> ENTITY_STORAGE_WORKER = new ReflectField<>(
@@ -211,6 +211,7 @@ public class NMSUtils {
                                                         ChunkCallback chunkCallback) {
         if (SERVER_LEVEL_ENTITY_MANAGER.isValid()) {
             CompletableFutureList<Void> workerChunks = new CompletableFutureList<>(-1);
+
             chunks.forEach(chunkPosition -> {
                 ServerLevel serverLevel = ((CraftWorld) chunkPosition.getWorld()).getHandle();
                 PersistentEntitySectionManager<Entity> entityManager = SERVER_LEVEL_ENTITY_MANAGER.get(serverLevel);
@@ -237,15 +238,17 @@ public class NMSUtils {
                 });
             });
 
-            workerChunks.forEachCompleted(pair -> {
-                // Wait for all chunks to load.
-            }, error -> {
-                Log.error(error, "An unexpected error occurred while interacting with an unloaded chunk:");
+            BukkitExecutor.createTask().runAsync(v -> {
+                workerChunks.forEachCompleted(pair -> {
+                    // Wait for all chunks to load.
+                }, error -> {
+                    Log.error(error, "An unexpected error occurred while interacting with an unloaded chunk:");
+                });
+            }).runSync(v -> {
+                chunkCallback.onFinish();
             });
-
-            chunkCallback.onFinish();
         } else {
-            BukkitExecutor.async(() -> {
+            BukkitExecutor.createTask().runAsync(v -> {
                 chunks.forEach(chunkPosition -> {
                     ServerLevel serverLevel = ((CraftWorld) chunkPosition.getWorld()).getHandle();
 
@@ -260,6 +263,7 @@ public class NMSUtils {
                         Log.error(error, "An unexpected error occurred while interacting with unloaded chunk ", chunkPosition, ":");
                     }
                 });
+            }).runSync(v -> {
                 chunkCallback.onFinish();
             });
         }
@@ -382,12 +386,14 @@ public class NMSUtils {
                 blockState.getValue(SlabBlock.TYPE) == SlabType.DOUBLE;
     }
 
+    @Nullable
     public static LevelChunk getCraftChunkHandle(CraftChunk craftChunk) {
-        if (CRAFT_CHUNK_GET_HANDLE.isValid())
-            return CRAFT_CHUNK_GET_HANDLE.invoke(craftChunk);
-
         ServerLevel serverLevel = craftChunk.getCraftWorld().getHandle();
-        return serverLevel.getChunk(craftChunk.getX(), craftChunk.getZ());
+        LevelChunk loadedChunk = serverLevel.getChunkIfLoaded(craftChunk.getX(), craftChunk.getZ());
+        if (loadedChunk != null)
+            return loadedChunk;
+
+        return (LevelChunk) serverLevel.getChunk(craftChunk.getX(), craftChunk.getZ(), ChunkStatus.FULL, true);
     }
 
     public record UnloadedChunkCompound(ChunkPosition chunkPosition,

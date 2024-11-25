@@ -3,7 +3,11 @@ package com.bgsoftware.superiorskyblock.nms.v1_20_3;
 import com.bgsoftware.common.annotations.Nullable;
 import com.bgsoftware.common.reflection.ReflectField;
 import com.bgsoftware.superiorskyblock.SuperiorSkyblockPlugin;
+import com.bgsoftware.superiorskyblock.api.island.Island;
 import com.bgsoftware.superiorskyblock.api.key.Key;
+import com.bgsoftware.superiorskyblock.api.wrappers.SuperiorPlayer;
+import com.bgsoftware.superiorskyblock.core.formatting.Formatters;
+import com.bgsoftware.superiorskyblock.core.formatting.impl.ChatFormatter;
 import com.bgsoftware.superiorskyblock.core.io.ClassProcessor;
 import com.bgsoftware.superiorskyblock.nms.NMSAlgorithms;
 import com.bgsoftware.superiorskyblock.nms.v1_20_3.algorithms.PaperGlowEnchantment;
@@ -13,6 +17,9 @@ import com.bgsoftware.superiorskyblock.nms.v1_20_3.menu.MenuDispenserBlockEntity
 import com.bgsoftware.superiorskyblock.nms.v1_20_3.menu.MenuFurnaceBlockEntity;
 import com.bgsoftware.superiorskyblock.nms.v1_20_3.menu.MenuHopperBlockEntity;
 import com.bgsoftware.superiorskyblock.nms.v1_20_3.world.KeyBlocksCache;
+import io.papermc.paper.chat.ChatRenderer;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.TextReplacementConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -39,18 +46,22 @@ import org.bukkit.craftbukkit.v1_20_R3.util.CraftChatMessage;
 import org.bukkit.craftbukkit.v1_20_R3.util.CraftMagicNumbers;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.FallingBlock;
+import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.potion.PotionEffect;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 
 public class NMSAlgorithmsImpl implements NMSAlgorithms {
+
+    private static final SuperiorSkyblockPlugin plugin = SuperiorSkyblockPlugin.getPlugin();
 
     private static final ReflectField<Map<NamespacedKey, Enchantment>> REGISTRY_CACHE =
             new ReflectField<>(CraftRegistry.class, Map.class, "cache");
@@ -73,12 +84,6 @@ public class NMSAlgorithmsImpl implements NMSAlgorithms {
             return Bukkit.getUnsafe().processClass(plugin.getDescription(), path, classBytes);
         }
     };
-
-    private final SuperiorSkyblockPlugin plugin;
-
-    public NMSAlgorithmsImpl(SuperiorSkyblockPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     @Override
     public void registerCommand(BukkitCommand command) {
@@ -197,7 +202,12 @@ public class NMSAlgorithmsImpl implements NMSAlgorithms {
 
     @Override
     public double getCurrentTps() {
-        return MinecraftServer.getServer().tps1.getAverage();
+        try {
+            return MinecraftServer.getServer().tps1.getAverage();
+        } catch (Throwable error) {
+            //noinspection removal
+            return MinecraftServer.getServer().recentTps[0];
+        }
     }
 
     @Override
@@ -210,7 +220,51 @@ public class NMSAlgorithmsImpl implements NMSAlgorithms {
         return CLASS_PROCESSOR;
     }
 
+    @Override
+    public void handlePaperChatRenderer(Object event) {
+        if (!(event instanceof io.papermc.paper.event.player.AsyncChatEvent asyncChatEvent))
+            return;
+
+        io.papermc.paper.chat.ChatRenderer originalRenderer = asyncChatEvent.renderer();
+        asyncChatEvent.renderer(new ChatRendererWrapper(originalRenderer).renderer);
+    }
+
     private interface MenuCreator extends BiFunction<InventoryHolder, String, Container> {
+    }
+
+    private static class ChatRendererWrapper {
+
+        private static final String MESSAGE_PLACEHOLDER = "{message}";
+        private static final net.kyori.adventure.text.Component MESSAGE_PLACEHOLDER_COMPONENT =
+                net.kyori.adventure.text.Component.text(MESSAGE_PLACEHOLDER);
+
+        private final ChatRenderer renderer = new ChatRenderer() {
+            @Override
+            public net.kyori.adventure.text.@NotNull Component render(@NotNull Player source,
+                                                                      net.kyori.adventure.text.@NotNull Component sourceDisplayName,
+                                                                      net.kyori.adventure.text.@NotNull Component message,
+                                                                      @NotNull Audience viewer) {
+                String originalFormat = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+                        .legacyAmpersand().serialize(originalRenderer.render(source, sourceDisplayName, MESSAGE_PLACEHOLDER_COMPONENT, viewer));
+
+                SuperiorPlayer superiorPlayer = plugin.getPlayers().getSuperiorPlayer(source);
+                Island island = superiorPlayer.getIsland();
+
+                return net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(
+                                Formatters.CHAT_FORMATTER.format(new ChatFormatter.ChatFormatArgs(originalFormat, superiorPlayer, island)))
+                        .replaceText(TextReplacementConfig.builder()
+                                .matchLiteral(MESSAGE_PLACEHOLDER)
+                                .replacement(message)
+                                .build());
+            }
+        };
+
+        private final ChatRenderer originalRenderer;
+
+        public ChatRendererWrapper(ChatRenderer originalRenderer) {
+            this.originalRenderer = originalRenderer;
+        }
+
     }
 
 }

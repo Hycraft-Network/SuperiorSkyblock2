@@ -635,6 +635,12 @@ public interface SettingsManager {
      */
     BigInteger getBlockCountsSaveThreshold();
 
+    /**
+     * Support for chat-signing in 1.19+.
+     * Config-path: chat-signing-support
+     */
+    boolean getChatSigningSupport();
+
     interface Database {
 
         /**
